@@ -299,6 +299,24 @@ echo -e "\n[✓] Proses integrasi komponen AI dari Notebook v3 selesai!"
 echo "===================================================="
 ```
 
+## 7. Implementasi SOAR & Respons Serangan
+
+### 7.1 Orkestrasi Insiden Menggunakan SOAR Shuffle
+Kelompok kami mengintegrasikan platform **SOAR Shuffle** dengan Wazuh API (Port 55000) sebagai komponen utama dalam lapisan otomatisasi respons pertahanan siber tingkat lanjut. Komponen ini bertanggung jawab penuh dalam memetakan fungsi kontrol keamanan pada **Tier 3 & Tier 4 (Response & Recovery)**, menggantikan intervensi manual analis untuk mempercepat proses mitigasi insiden.
+
+### 7.2 Alur Otomasi Respons (*Playbooks*)
+Alur kerja otomatisasi penanganan insiden (*Incident Response Lifecyle*) dikonfigurasikan melalui arsitektur *playbook* terintegrasi berikut:
+
+1. **Deteksi & Filter Kontekstual AI:** 
+   Log mentah dikumpulkan oleh Wazuh Agent dari mesin target, memicu aturan kustom (*Custom Ruleset*), dan langsung disaring oleh model kecerdasan buatan via skrip `predict.py` untuk divalidasi keabsahannya.
+2. **Pemicu Webhook (SOAR Trigger):** 
+   Apabila model AI memvalidasi status log sebagai ancaman nyata (*True Positive*), Wazuh Manager secara otomatis mengirimkan paket data alert berisi detail muatan (*payload*) serangan secara *real-time* ke Webhook SOAR Shuffle. Jika terindikasi *False Positive*, alur dihentikan untuk mencegah penumpukan antrean respons tak perlu.
+3. **Eksekusi Playbook Mitigasi Tanpa Jeda:** 
+   Begitu *payload* valid diterima, SOAR Shuffle langsung mengeksekusi dua tindakan mitigasi paralel:
+   * **Isolasi Jaringan (Network Isolation):** SOAR mengirimkan perintah eksekusi kembali ke Agent-1 untuk mengaktifkan aturan pertahanan firewall `iptables`, yang secara instan memblokir dan menjatuhkan (*drop*) seluruh paket data dari alamat IP penyerang (`172.188.96.13`).
+   * **Notifikasi Insiden (Incident Notification):** Sistem mengirimkan pesan ringkasan detail insiden secara otomatis ke email atau saluran Slack tim analis SOC guna menjaga kesadaran situasi (*Situational Awareness*).
+
+  
 ## 8. Metrik Pengujian & Hasil Analisis (Benchmark)
 
 ### 8.1 Metrik Pengukuran Performa
@@ -318,10 +336,22 @@ Berdasarkan pengujian model integrasi data, berikut adalah perbandingan metrik o
 
 ### 8.3 Visualisasi Evaluasi Model
 Model machine learning yang dikembangkan juga menghasilkan visualisasi metrik evaluasi yang tersimpan di dalam direktori proyek. Gambar-gambar grafik berikut dapat dirujuk untuk analisis performa yang lebih mendalam:
+
 * `alert_volume_timeline.png` (Analisis volume pemicu alert berdasarkan rentang waktu)
+  
+  <img width="934" height="305" alt="Screenshot 2026-06-24 at 18 48 12" src="https://github.com/user-attachments/assets/20d76ac7-00bf-455a-94da-b9b2b28e6c3d" />
+
 * `label_distribution.png` (Distribusi kelas data latih)
+  
+  <img width="935" height="356" alt="Screenshot 2026-06-24 at 18 49 15" src="https://github.com/user-attachments/assets/a6eeae85-ce33-4938-8cd2-2b9ff0a5cb48" />
+
 * `eval_confusion_roc.png` (Matriks konfusi dan kurva karakteristik operasi penerima untuk akurasi model)
+  
+ <img width="993" height="381" alt="Screenshot 2026-06-24 at 18 43 21" src="https://github.com/user-attachments/assets/8ade326e-ee74-4000-a8b0-d0a1a7ae30bb" />
+
 * `feature_importance.png` (Bobot pengaruh fitur log terhadap keputusan klasifikasi AI)
+  
+  <img width="909" height="542" alt="Screenshot 2026-06-24 at 18 50 33" src="https://github.com/user-attachments/assets/386b1038-34dc-43f0-ba6b-63a180558fc6" />
 
 ## 9. Panduan Instalasi & Penggunaan
 

@@ -194,19 +194,53 @@ Sistem kolaborasi AI kami dilatih menggunakan berkas kustom metadata untuk menge
 ## 6. Pengembangan & Integrasi Model AI
 
 ### 6.1 Deskripsi Komponen AI Mandiri
-Sesuai dengan spesifikasi tugas yang melarang penggunaan API pihak ketiga, kelompok kami membangun dan melatih komponen AI secara mandiri (*independent AI module*). Model ini ditempatkan langsung di dalam *pipeline* deteksi lokal pada server **Wazuh-Manager**. 
+Sesuai dengan spesifikasi tugas yang melarang penggunaan API pihak ketiga, kelompok kami mengembangkan model kecerdasan buatan berbasis *Machine Learning* secara mandiri menggunakan modul Python (`model-ddos-wazuhv3.ipynb`). Model ini dilatih untuk menganalisis karakteristik log secara kontekstual guna membedakan antara serangan DDoS nyata (*True Positive*) dan lonjakan trafik normal (*False Positive*).
 
-Komponen ini terdiri dari tiga berkas utama yang diletakkan pada direktori `/var/ossec/active-response/bin/`:
-1.  `ddos_model_v2.pkl`: Berkas biner model *machine learning* yang telah dilatih untuk melakukan klasifikasi dan mengenali pola serangan DDoS.
-2.  `model_metadata_v2.json`: Berkas konfigurasi yang memuat daftar fitur (*features extraction*) yang diekstrak dari data mentah log Wazuh.
-3.  `predict.py`: Skrip inferensi berbasis Python 3 yang bertindak sebagai eksekutor utama. Skrip ini akan memuat berkas `.pkl` dan `.json` secara otomatis saat dipanggil oleh sistem.
+Komponen AI hasil kompilasi dari notebook ini melahirkan tiga berkas utama yang ditempatkan pada direktori `/var/ossec/active-response/bin/` di server Wazuh Manager:
+1.  `ddos_model_v2.pkl`: Berkas biner model ML terlatih yang menyimpan bobot keputusan klasifikasi.
+2.  `model_metadata_v2.json`: Berkas konfigurasi yang memuat daftar fitur (*features extraction*) hasil prapemrosesan log mentah Wazuh (seperti volume alert, frekuensi `firedtimes`, dan pola IP).
+3.  `predict.py`: Skrip inferensi utama berbasis Python 3 yang melakukan pembacaan log dari *stdin*, memuat model `.pkl`, mengekstrak fitur sesuai `.json`, dan menghasilkan keputusan filter.
 
-### 6.2 Langkah Pemasangan Modul AI pada Wazuh Manager
-Proses integrasi modul AI ke dalam arsitektur keamanan dilakukan melalui langkah-langkah berikut:
+### 6.2 Alur Pemrosesan Data & Fitur Model AI
+Model AI di dalam repositori ini bekerja dengan mengekstrak beberapa fitur penting dari data JSON alert Wazuh secara berkala (*buffering window*):
+* **Alert Volume Timeline:** Menghitung total pemicu alert dalam rentang waktu tertentu untuk mendeteksi anomali volume paket masif.
+* **Label Distribution & Feature Importance:** Model mengevaluasi bobot kecurigaan berdasarkan ID aturan kustom, protokol jaringan yang digunakan, serta keunikan alamat IP asal (`src_ip`).
 
-#### Langkah 1: Pemindahan Berkas (*File Deployment*)
-Seluruh berkas model dipindahkan dari perangkat lokal ke folder sementara server Wazuh Manager menggunakan protokol SCP:
+### 6.3 Otomasi Pemasangan Modul AI (Single Bash Script)
+Untuk menyederhanakan proses pemasangan, seluruh tahapan deployment berkas, instalasi *dependency library* pada framework Python internal Wazuh, pemformatan izin akses, hingga injeksi baris konfigurasi ke `/var/ossec/etc/ossec.conf` dapat dieksekusi melalui satu perintah Bash berikut:
+
 ```bash
-scp ddos_model_v2.pkl predict.py model_metadata_v2.json azureuser@172.188.65.81:/tmp/
+#!/bin/bash
 
+# ==============================================================================
+# SCRIPT DEPLOYMENT & INTEGRASI MODUL AI - FP SOC
+# Jalankan script ini langsung di dalam server Wazuh Manager
+# ==============================================================================
 
+echo "===================================================="
+echo "[+] Memindahkan file model AI ke folder Active-Response..."
+sudo mv /tmp/ddos_model_v2.pkl /var/ossec/active-response/bin/
+sudo mv /tmp/predict.py /var/ossec/active-response/bin/
+sudo mv /tmp/model_metadata_v2.json /var/ossec/active-response/bin/
+
+echo "[+] Mengonfigurasi hak akses aman dan kepemilikan berkas..."
+sudo chmod 750 /var/ossec/active-response/bin/predict.py
+sudo chown root:wazuh /var/ossec/active-response/bin/predict.py
+
+echo -e "\n[+] Menginstall library python ke framework internal terisolasi Wazuh..."
+sudo /var/ossec/framework/python/bin/pip3 install joblib numpy scikit-learn --break-system-packages
+
+echo -e "\n[+] Menyisipkan konfigurasi Active Response ke /var/ossec/etc/ossec.conf..."
+# Membuat backup file ossec.conf demi keamanan
+sudo cp /var/ossec/etc/ossec.conf /var/ossec/etc/ossec.conf.bak
+
+# Menyisipkan tag <command> dan <active-response> sebelum tag penutup </ossec_config>
+sudo sed -i '/<\/ossec_config>/i \
+  <command>\n    <name>ddos-ai-predict<\/name>\n    <executable>predict.py<\/executable>\n    <timeout_allowed>yes<\/timeout_allowed>\n  <\/command>\n\n  <active-response>\n    <command>ddos-ai-predict<\/command>\n    <location>local<\/location>\n    <rules_id>100100,100101<\/rules_id>\n  <\/active-response>' /var/ossec/etc/ossec.conf
+
+echo -e "\n[+] Menerapkan konfigurasi baru dengan restart wazuh-manager..."
+sudo systemctl restart wazuh-manager
+
+echo -e "\n[✓] Proses integrasi komponen AI dari Notebook v3 selesai!"
+echo "===================================================="
+```

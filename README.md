@@ -80,50 +80,42 @@ Ekosistem SOC pada proyek ini saling terhubung membentuk satu kesatuan alur kerj
 
 ### 2.4 Topologi & Diagram Aliran Data Arsitektur
 
-#### A. Diagram Aliran Data (Mermaid Rendered Diagram)
-*GitHub akan otomatis merender kode di bawah ini menjadi diagram visual interaktif:*
+```text
+==========================================================================================
+                     AZURE CLOUD INFRASTRUCTURE (Southeast Asia)
+                                Resource Group: FP SOC
+==========================================================================================
 
-```mermaid
-graph TD
-    %% Node Definitions
-    subgraph Azure_Cloud ["Azure Cloud Infrastructure - Southeast Asia Resource Group: FP SOC"]
-        subgraph Attack_Simulation ["Simulasi Aktivitas"]
-            Attacker["💻 Agent-2 (Attacker)<br>IP: 172.188.96.13"]
-            Victim["🛡️ Agent-1 (Victim/Target)<br>IP: 4.145.88.196"]
-        end
+      [ SIMULASI AKTIVITAS ]
+      +-----------------------+                         +-----------------------+
+      |   Agent-2 (Attacker)  |                         |    Agent-1 (Victim)   |
+      |   IP: 172.188.96.13   | --(Simulasi Serangan)-->|    IP: 4.145.88.196   |
+      +-----------------------+                         +-----------------------+
+                                                                    |
+                                                                    | (Kirim Log Jalur
+                                                                    |  Port 1514 Encrypted)
+                                                                    v
+      [ PUSAT MONITORING & ANALISIS ]
+      +-------------------------------------------------------------------------+
+      | WAZUH-MANAGER SERVER (IP Public: 172.188.65.81 | IP Private: 10.0.0.4)   |
+      |                                                                         |
+      |  --> Memicu Aturan Kustom (Custom Ruleset ID: 100100, 100101)            |
+      |                                                                         |
+      |    +---------------------------------------------------------------+    |
+      |    | Direktori Active-Response (/var/ossec/active-response/bin/)   |    |
+      |    |                                                               |    |
+      |    |  [🐍 predict.py] <--> [🤖 ddos_model_v2.pkl]                  |    |
+      |    |         |         <--> [📄 model_metadata_v2.json]             |    |
+      |    +---------+-----------------------------------------------------+    |
+      |              |                                                          |
+      |              v (Lolos Filter AI / Validasi Bukan False Positive)        |
+      +--------------+----------------------------------------------------------+
+                     |
+                     v
+      [ RESPONS & OTOMASI ]
+      +-----------------------+
+      |     SOAR SHUFFLE      | --(Eksekusi Aksi Mitigasi / Blokir Aturan)--> [ Selesai ]
+      |  (Automated Playbook) |
+      +-----------------------+
 
-        subgraph Central_Defense ["Pusat Monitoring & Analisis"]
-            Manager["🖥️ Wazuh-Manager Server<br>Public IP: 172.188.65.81<br>Private IP: 10.0.0.4"]
-            
-            subgraph Active_Response_Directory ["/var/ossec/active-response/bin/"]
-                AI_Script["🐍 predict.py (Script Inferensi)"]
-                AI_Model["🤖 ddos_model_v2.pkl"]
-                AI_Meta["📄 model_metadata_v2.json"]
-            end
-        end
-
-        subgraph Orchestration ["Respons & Otomasi"]
-            SOAR["⚡ SOAR SHUFFLE<br>(Automated Playbooks)"]
-        end
-    end
-
-    %% Connection & Data Flow Links
-    Attacker -- "Simulasi Serangan<br>(DDoS / Malware / SocEng)" --> Victim
-    Victim -- "Kirim Log Aktivitas<br>(Encrypted - Port 1514 TCP)" --> Manager
-    
-    Manager -- "Trigger Custom Ruleset<br>(ID: 100100, 100101)" --> AI_Script
-    AI_Script --- AI_Model
-    AI_Script --- AI_Meta
-    
-    AI_Script -- "Validasi Status Alert<br>(Filter False Positive)" --> SOAR
-    SOAR -- "Eksekusi Aksi Blokir / Mitigasi" --> Victim
-
-    %% Styling
-    style Azure_Cloud fill:#f9f9f9,stroke:#007fff,stroke-width:2px;
-    style Attack_Simulation fill:#fff5f5,stroke:#ff4d4d,stroke-width:1px;
-    style Central_Defense fill:#f5faff,stroke:#1890ff,stroke-width:1px;
-    style Active_Response_Directory fill:#e6f7ff,stroke:#91d5ff,stroke-width:1px;
-    style Orchestration fill:#f6ffed,stroke:#52c41a,stroke-width:1px;
-    style Attacker fill:#fff1f0,stroke:#ffa39e;
-    style Victim fill:#e6f7ff,stroke:#91d5ff;
-    style Manager fill:#efdbff,stroke:#b37feb;
+==========================================================================================

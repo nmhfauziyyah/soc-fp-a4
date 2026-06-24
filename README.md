@@ -244,3 +244,161 @@ sudo systemctl restart wazuh-manager
 echo -e "\n[✓] Proses integrasi komponen AI dari Notebook v3 selesai!"
 echo "===================================================="
 ```
+
+## 6. Pengembangan & Integrasi Model AI
+
+### 6.1 Deskripsi Komponen AI Mandiri
+Sesuai dengan spesifikasi tugas yang melarang penggunaan API pihak ketiga, kelompok kami mengembangkan model kecerdasan buatan berbasis *Machine Learning* secara mandiri menggunakan modul Python (`model-ddos-wazuhv3.ipynb`). Model ini dilatih untuk menganalisis karakteristik log secara kontekstual guna membedakan antara serangan DDoS nyata (*True Positive*) dan lonjakan trafik normal (*False Positive*).
+
+Komponen AI hasil kompilasi dari notebook ini melahirkan tiga berkas utama yang ditempatkan pada direktori `/var/ossec/active-response/bin/` di server Wazuh Manager:
+1.  `ddos_model_v2.pkl`: Berkas biner model ML terlatih yang menyimpan bobot keputusan klasifikasi.
+2.  `model_metadata_v2.json`: Berkas konfigurasi yang memuat daftar fitur (*features extraction*) hasil prapemrosesan log mentah Wazuh (seperti volume alert, frekuensi `firedtimes`, dan pola IP).
+3.  `predict.py`: Skrip inferensi utama berbasis Python 3 yang melakukan pembacaan log dari *stdin*, memuat model `.pkl`, mengekstrak fitur sesuai `.json`, dan menghasilkan keputusan filter.
+
+### 6.2 Alur Pemrosesan Data & Fitur Model AI
+Model AI di dalam repositori ini bekerja dengan mengekstrak beberapa fitur penting dari data JSON alert Wazuh secara berkala (*buffering window*):
+* **Alert Volume Timeline:** Menghitung total pemicu alert dalam rentang waktu tertentu untuk mendeteksi anomali volume paket masif.
+* **Label Distribution & Feature Importance:** Model mengevaluasi bobot kecurigaan berdasarkan ID aturan kustom, protokol jaringan yang digunakan, serta keunikan alamat IP asal (`src_ip`).
+
+### 6.3 Otomasi Pemasangan Modul AI (Single Bash Script)
+Untuk menyederhanakan proses pemasangan, seluruh tahapan deployment berkas, instalasi *dependency library* pada framework Python internal Wazuh, pemformatan izin akses, hingga injeksi baris konfigurasi ke `/var/ossec/etc/ossec.conf` dapat dieksekusi melalui satu perintah Bash berikut:
+
+```bash
+#!/bin/bash
+
+# ==============================================================================
+# SCRIPT DEPLOYMENT & INTEGRASI MODUL AI - FP SOC
+# Jalankan script ini langsung di dalam server Wazuh Manager
+# ==============================================================================
+
+echo "===================================================="
+echo "[+] Memindahkan file model AI ke folder Active-Response..."
+sudo mv /tmp/ddos_model_v2.pkl /var/ossec/active-response/bin/
+sudo mv /tmp/predict.py /var/ossec/active-response/bin/
+sudo mv /tmp/model_metadata_v2.json /var/ossec/active-response/bin/
+
+echo "[+] Mengonfigurasi hak akses aman dan kepemilikan berkas..."
+sudo chmod 750 /var/ossec/active-response/bin/predict.py
+sudo chown root:wazuh /var/ossec/active-response/bin/predict.py
+
+echo -e "\n[+] Menginstall library python ke framework internal terisolasi Wazuh..."
+sudo /var/ossec/framework/python/bin/pip3 install joblib numpy scikit-learn --break-system-packages
+
+echo -e "\n[+] Menyisipkan konfigurasi Active Response ke /var/ossec/etc/ossec.conf..."
+# Membuat backup file ossec.conf demi keamanan
+sudo cp /var/ossec/etc/ossec.conf /var/ossec/etc/ossec.conf.bak
+
+# Menyisipkan tag <command> dan <active-response> sebelum tag penutup </ossec_config>
+sudo sed -i '/<\/ossec_config>/i \
+  <command>\n    <name>ddos-ai-predict<\/name>\n    <executable>predict.py<\/executable>\n    <timeout_allowed>yes<\/timeout_allowed>\n  <\/command>\n\n  <active-response>\n    <command>ddos-ai-predict<\/command>\n    <location>local<\/location>\n    <rules_id>100100,100101<\/rules_id>\n  <\/active-response>' /var/ossec/etc/ossec.conf
+
+echo -e "\n[+] Menerapkan konfigurasi baru dengan restart wazuh-manager..."
+sudo systemctl restart wazuh-manager
+
+echo -e "\n[✓] Proses integrasi komponen AI dari Notebook v3 selesai!"
+echo "===================================================="
+```
+
+## 8. Metrik Pengujian & Hasil Analisis (Benchmark)
+
+### 8.1 Metrik Pengukuran Performa
+Berdasarkan keluaran pengujian dari berkas Jupyter Notebook `model-ddos-wazuhv3.ipynb`, performa arsitektur SOC kelompok kami diukur menggunakan matriks evaluasi standar pertahanan keamanan siber berikut:
+* **False Alarm Reduction Rate (FARR):** Rasio persentase tingkat keberhasilan model AI dalam mereduksi dan menyaring alarm palsu (*false positives*).
+* **Detection Accuracy & Recall:** Pengukuran kestabilan model untuk menjamin bahwa penyaringan alarm palsu tidak mengorbankan sensitivitas sistem terhadap serangan DDoS asli (*True Positive*).
+* **Mean Time to Respond (MTTR):** Durasi total waktu respons yang dibutuhkan sejak Agent-2 menginisiasi serangan siber hingga SOAR Shuffle berhasil mengisolasi atau memblokir penyerang pada sisi Agent-1.
+
+### 8.2 Hasil Analisis Benchmark (Sebelum vs Sesudah Integrasi AI)
+Berdasarkan pengujian model integrasi data, berikut adalah perbandingan metrik operasional sistem SOC kelompok kami:
+
+| Parameter Uji | Sebelum Integrasi AI (Wazuh Standar) | Sesudah Integrasi AI (Human-AI Model) |
+| :--- | :---: | :---: |
+| **Volume False Alarms / Hari** | Tinggi (*Memicu Alert Fatigue*) | Mereduksi Secara Signifikan |
+| **Akurasi Klasifikasi Serangan** | Kaku (Hanya mencocokkan baris Ruleset) | Tinggi & Adaptif (Berbasis *Machine Learning*) |
+| **Waktu Eksekusi Blokir Serangan** | Manual oleh Analis (Memakan waktu lama) | Otomatis via SOAR (Selesai dalam hitungan detik) |
+
+### 8.3 Visualisasi Evaluasi Model
+Model machine learning yang dikembangkan juga menghasilkan visualisasi metrik evaluasi yang tersimpan di dalam direktori proyek. Gambar-gambar grafik berikut dapat dirujuk untuk analisis performa yang lebih mendalam:
+* `alert_volume_timeline.png` (Analisis volume pemicu alert berdasarkan rentang waktu)
+* `label_distribution.png` (Distribusi kelas data latih)
+* `eval_confusion_roc.png` (Matriks konfusi dan kurva karakteristik operasi penerima untuk akurasi model)
+* `feature_importance.png` (Bobot pengaruh fitur log terhadap keputusan klasifikasi AI)
+
+## 9. Panduan Instalasi & Penggunaan
+
+### 9.1 Akses Manajemen & Monitoring Sistem
+Untuk memudahkan pengelolaan infrastruktur cloud, klaster Virtual Machine dapat diakses melalui SSH menggunakan detail alamat berikut:
+*   **Wazuh Manager Server:** `azureuser@172.188.65.81`
+*   **Agent-1 (Victim Host):** `azureuser@4.145.88.196`
+*   **Agent-2 (Attacker Host):** `azureuser@172.188.96.13`
+
+Sedangkan untuk memantau visualisasi metrik keamanan dan status alert, Anda dapat mengakses antarmuka grafis web dengan detail berikut:
+*   **URL Wazuh Dashboard:** `https://172.188.65.81`
+*   **Kredensial Akses:**
+    *   **Username:** `admin`
+    *   **Password:** `F+PSVLDBqXjAgkHfeCkqXNsk?3vVjE44`
+
+### 9.2 Skrip Otomasi Pemeriksaan Kesehatan Sistem (System Health Check)
+Guna memastikan seluruh core engine Wazuh, modul indexer, dashboard web, serta status konektivitas jaringan antar Agent berjalan normal setelah integrasi AI, jalankan skrip Bash serbaguna di bawah ini langsung di server **Wazuh Manager**:
+
+```bash
+#!/bin/bash
+
+# ==============================================================================
+# SCRIPT UTALITAS SOC - DIAGNOSTIK KESEHATAN SISTEM & KONEKTIVITAS
+# Jalankan script ini di server Wazuh Manager untuk validasi pasca-integrasi AI
+# ==============================================================================
+
+COLOR_RESET="\033[0m"
+COLOR_GREEN="\033[0;32m"
+COLOR_RED="\033[0;31m"
+COLOR_BLUE="\033[0;34m"
+COLOR_YELLOW="\033[1;33m"
+
+echo -e "${COLOR_BLUE}======================================================${COLOR_RESET}"
+echo -e "${COLOR_BLUE}      SOC SYSTEM HEALTH CHECK & DIAGNOSTIC UTILITY    ${COLOR_RESET}"
+echo -e "${COLOR_BLUE}======================================================${COLOR_RESET}"
+
+# 1. Memeriksa Status Layanan Core System
+echo -e "\n${COLOR_YELLOW}[1/3] Memeriksa Status Layanan Utama Server Pusat...${COLOR_RESET}"
+SERVICES=("wazuh-manager" "wazuh-indexer" "wazuh-dashboard")
+
+for SVC in "${SERVICES[@]}"; do
+    if systemctl is-active --quiet "$SVC"; then
+        echo -e "  [${COLOR_GREEN}OK${COLOR_RESET}] Layanan ${COLOR_GREEN}$SVC${COLOR_RESET} berjalan dengan normal."
+    else
+        echo -e "  [${COLOR_RED}FAIL${COLOR_RESET}] Layanan ${COLOR_RED}$SVC${COLOR_RESET} mati atau mengalami error!"
+    fi
+done
+
+# 2. Memeriksa Port Penting yang Terbuka
+echo -e "\n${COLOR_YELLOW}[2/3] Memeriksa Ketersediaan Port Komunikasi Integrasi...${COLOR_RESET}"
+PORTS=(1514 1515 55000 9200 443)
+
+for PORT in "${PORTS[@]}"; do
+    if ss -tuln | grep -q ":$PORT "; then
+        echo -e "  [${COLOR_GREEN}OPEN${COLOR_RESET}] Port ${COLOR_GREEN}$PORT${COLOR_RESET} aktif mendengarkan koneksi."
+    else
+        echo -e "  [${COLOR_RED}CLOSED${COLOR_RESET}] Port ${COLOR_RED}$PORT${COLOR_RESET} tertutup! Periksa konfigurasi firewall/NSG Azure."
+    fi
+done
+
+# 3. Memeriksa Status Konektivitas Jaringan Endpoint Agent
+echo -e "\n${COLOR_YELLOW}[3/3] Menguji Ping Konektivitas Jaringan Antar Host...${COLOR_RESET}"
+AGENTS=("4.145.88.196" "172.188.96.13")
+AGENT_NAMES=("Agent-1 (Victim)" "Agent-2 (Attacker)")
+
+for i in "${!AGENTS[@]}"; do
+    IP=${AGENTS[$i]}
+    NAME=${AGENT_NAMES[$i]}
+    
+    if ping -c 1 -W 2 "$IP" > /dev/null 2>&1; then
+        echo -e "  [${COLOR_GREEN}ONLINE${COLOR_RESET}] Berhasil terhubung ke ${COLOR_GREEN}$NAME ($IP)${COLOR_RESET}."
+    else
+        echo -e "  [${COLOR_RED}OFFLINE${COLOR_RESET}] Gagal menjangkau ${COLOR_RED}$NAME ($IP)${COLOR_RESET}. Cek rule inbound/outbound."
+    fi
+done
+
+echo -e "\n${COLOR_BLUE}======================================================${COLOR_RESET}"
+echo -e "${COLOR_GREEN}[✓] Proses diagnostik kesehatan sistem SOC selesai!${COLOR_RESET}"
+echo -e "${COLOR_BLUE}======================================================${COLOR_RESET}"
+```

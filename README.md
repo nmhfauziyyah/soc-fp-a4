@@ -86,23 +86,23 @@ Ekosistem SOC pada proyek ini saling terhubung membentuk satu kesatuan alur kerj
 ```mermaid
 graph TD
     %% Node Definitions
-    subgraph Azure_Cloud [Azure Cloud Infrastructure - Southeast Asia Resource Group: FP SOC]
-        subgraph Attack_Simulation [Simulasi Aktivitas]
+    subgraph Azure_Cloud ["Azure Cloud Infrastructure - Southeast Asia Resource Group: FP SOC"]
+        subgraph Attack_Simulation ["Simulasi Aktivitas"]
             Attacker["💻 Agent-2 (Attacker)<br>IP: 172.188.96.13"]
             Victim["🛡️ Agent-1 (Victim/Target)<br>IP: 4.145.88.196"]
         end
 
-        subgraph Central_Defense [Pusat Monitoring & Analisis]
+        subgraph Central_Defense ["Pusat Monitoring & Analisis"]
             Manager["🖥️ Wazuh-Manager Server<br>Public IP: 172.188.65.81<br>Private IP: 10.0.0.4"]
             
-            subgraph Active_Response_Directory [/var/ossec/active-response/bin/]
+            subgraph Active_Response_Directory ["/var/ossec/active-response/bin/"]
                 AI_Script["🐍 predict.py (Script Inferensi)"]
                 AI_Model["🤖 ddos_model_v2.pkl"]
                 AI_Meta["📄 model_metadata_v2.json"]
             end
         end
 
-        subgraph Orchestration [Respons & Otomasi]
+        subgraph Orchestration ["Respons & Otomasi"]
             SOAR["⚡ SOAR SHUFFLE<br>(Automated Playbooks)"]
         end
     end
@@ -127,5 +127,3 @@ graph TD
     style Attacker fill:#fff1f0,stroke:#ffa39e;
     style Victim fill:#e6f7ff,stroke:#91d5ff;
     style Manager fill:#efdbff,stroke:#b37feb;
-
-

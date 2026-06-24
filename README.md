@@ -345,7 +345,6 @@ Guna memastikan seluruh core engine Wazuh, modul indexer, dashboard web, serta s
 
 # ==============================================================================
 # SCRIPT UTALITAS SOC - DIAGNOSTIK KESEHATAN SISTEM & KONEKTIVITAS
-# Jalankan script ini di server Wazuh Manager untuk validasi pasca-integrasi AI
 # ==============================================================================
 
 COLOR_RESET="\033[0m"
